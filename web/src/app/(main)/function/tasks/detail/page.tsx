@@ -205,14 +205,22 @@ function TaskLLMControl({ task, profiles, onUpdated }: { task: Task; profiles: L
 function TaskDetailInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const id = searchParams.get("id") ?? "";
+  const requestedId = searchParams.get("id")?.trim() ?? "";
   const [task, setTask] = React.useState<Task | null>(null);
+  const id = requestedId || task?.id || "";
   const [paused, setPaused] = React.useState(false);
   const [loaded, setLoaded] = React.useState(false);
   const [tab, setTab] = React.useState("sessions");
   const [interceptPendingCount, setInterceptPendingCount] = React.useState(0);
   const [profiles, setProfiles] = React.useState<LLMProfile[]>([]);
   const [archiving, setArchiving] = React.useState(false);
+
+  React.useEffect(() => {
+    if (requestedId || !task?.id) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("id", task.id);
+    router.replace(`${url.pathname}${url.search}${url.hash}`, { scroll: false });
+  }, [requestedId, router, task?.id]);
 
   React.useEffect(() => {
     api
@@ -222,6 +230,7 @@ function TaskDetailInner() {
   }, []);
 
   React.useEffect(() => {
+    if (!id) return;
     let alive = true;
     const load = () =>
       api
@@ -242,6 +251,10 @@ function TaskDetailInner() {
 
   const taskLoadInFlight = React.useRef<string | null>(null);
   const load = React.useCallback(() => {
+    if (!id) {
+      setLoaded(true);
+      return;
+    }
     if (taskLoadInFlight.current === id) return;
     taskLoadInFlight.current = id;
     Promise.all([api.task(id), api.stats(id).catch(() => null)])
@@ -300,10 +313,12 @@ function TaskDetailInner() {
     }
   }
 
-  if (!task) {
+  if (!task || task.id !== id) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-10 text-center">
-        <p className="text-muted-foreground">{loaded ? `任务 ${id} 已被删除、归档或不存在` : "加载中…"}</p>
+        <p className="text-muted-foreground">
+          {!id ? "缺少任务 ID，请从任务列表重新打开" : loaded ? `任务 ${id} 已被删除、归档或不存在` : "加载中…"}
+        </p>
         {loaded && (
           <Button asChild variant="outline">
             <Link href="/function/tasks">
